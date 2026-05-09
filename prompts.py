@@ -1,7 +1,8 @@
-from tools.file_search import hello_world_tool_schema, ls_tool_schema, read_tool_schema
+from tools.file_search import ls_tool_schema, read_tool_schema
 
 
 def _render_schema(s: dict) -> str:
+    """Render a tool schema dict into a human-readable string for the system prompt."""
     lines = [f"**{s['name']}**: {s['description']}"]
     for arg_name, meta in s["args"].items():
         req = "required" if meta["required"] else "optional"
@@ -11,7 +12,7 @@ def _render_schema(s: dict) -> str:
 
 _tool_block = "\n\n".join(
     _render_schema(s)
-    for s in [hello_world_tool_schema, ls_tool_schema, read_tool_schema]
+    for s in [ls_tool_schema, read_tool_schema]
 )
 
 SYSTEM_MESSAGE = f"""

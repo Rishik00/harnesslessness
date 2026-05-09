@@ -22,6 +22,7 @@ load_dotenv(DOTENV_PATH)
 
 
 def parse_result(response: str) -> ToolCallResult | Answer:
+    """Parse a raw model response into a ToolCallResult or Answer."""
     tool_match = TOOL_CALL_PATTERN.search(response)
 
     if tool_match:
@@ -41,6 +42,7 @@ def parse_result(response: str) -> ToolCallResult | Answer:
 
 
 def _get_openrouter_key() -> str:
+    """Return the OpenRouter API key from the environment, or exit with an error."""
     api_key: str | None = os.environ.get("OPENROUTER_API_KEY")
 
     if api_key:
@@ -53,7 +55,8 @@ def _get_openrouter_key() -> str:
     raise SystemExit(msg)
 
 
-def run(prompt: str):
+def run(prompt: str) -> None:
+    """Run the agent loop for a given prompt, printing the final answer."""
     api_key = _get_openrouter_key()
 
     client = OpenAI(

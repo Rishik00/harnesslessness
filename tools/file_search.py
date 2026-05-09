@@ -1,11 +1,6 @@
-## Define a set of tools for the model to do file searching with.
-
 import os
 
-
-def verify_path_exists(path: str) -> bool:
-    return os.path.exists(path)
-
+from .utils import verify_path_exists
 
 ls_tool_schema = {
     "name": "ls_tool",
@@ -21,6 +16,7 @@ ls_tool_schema = {
 
 
 def ls_tool(dir: str) -> list[str] | str:
+    """List files and folders in a directory."""
     if not verify_path_exists(dir):
         return f"Error: path does not exist: {dir}"
     return os.listdir(dir)
@@ -40,6 +36,7 @@ read_tool_schema = {
 
 
 def read_tool(file_path: str) -> str:
+    """Read and return the full text contents of a file."""
     if not verify_path_exists(file_path):
         return f"Error: file does not exist: {file_path}"
     with open(file_path, "r") as f:
@@ -51,9 +48,11 @@ def write_file_tool(file_path: str):
     pass
 
 
+def bash_too():
+    pass
+
+
 __all__ = [
-    "hello_world_tool",
-    "hello_world_tool_schema",
     "ls_tool",
     "ls_tool_schema",
     "read_tool",
