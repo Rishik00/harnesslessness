@@ -7,9 +7,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
+import tools
+
+# Local imports
 from config import Answer, ToolCallResult
 from prompts import SYSTEM_MESSAGE
-from tools import file_search as file_search
 
 TOOL_CALL_PATTERN = re.compile(r"<\|tool_call\|>(.*?)<\|tool_call\|>", re.DOTALL)
 ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
@@ -79,11 +81,12 @@ def run(prompt: str) -> None:
 
         completion = client.chat.completions.create(model=MODEL_NAME, messages=messages)
         response = completion.choices[0].message.content or ""
+
         parse = parse_result(response)
         messages.append({"role": "assistant", "content": response})
 
         if isinstance(parse, ToolCallResult):
-            func = getattr(file_search, parse.function_name)
+            func = getattr(tools, parse.function_name)
             result = func(**parse.args)
             messages.append(
                 {
