@@ -2,15 +2,18 @@ import argparse
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from rich.live import Live
 
 import tools
 
 # Local imports
 from config import Answer, ToolCallResult
+from demo_rich import build_layout
 from prompts import SYSTEM_MESSAGE
 
 TOOL_CALL_PATTERN = re.compile(r"<\|tool_call\|>(.*?)<\|tool_call\|>", re.DOTALL)
@@ -57,8 +60,20 @@ def _get_openrouter_key() -> str:
     raise SystemExit(msg)
 
 
+def _extract_reasoning(response: str) -> str | None:
+    """Return any text before the first tool-call or answer tag, if non-empty."""
+    tool_idx = response.find("<|tool_call|>")
+    answer_idx = response.find("<answer>")
+    cut = min(
+        tool_idx if tool_idx >= 0 else len(response),
+        answer_idx if answer_idx >= 0 else len(response),
+    )
+    reasoning = response[:cut].strip()
+    return reasoning or None
+
+
 def run(prompt: str) -> None:
-    """Run the agent loop for a given prompt, printing the final answer."""
+    """Run the agent loop for a given prompt with a live Rich UI."""
     api_key = _get_openrouter_key()
 
     client = OpenAI(
@@ -71,36 +86,71 @@ def run(prompt: str) -> None:
         {"role": "user", "content": prompt},
     ]
 
-    iter = 0
-    while True:
-        # TBD: if we're at max iters tell the model with one more turn and summarize the
-        # conversation
-        if iter >= MAX_ITERS:
-            print("Max iters reached!")
-            break
+    events: list[dict] = []
+    iter_count = 0
+    done = False
+    final_answer = ""
 
-        completion = client.chat.completions.create(model=MODEL_NAME, messages=messages)
-        response = completion.choices[0].message.content or ""
+    with Live(
+        build_layout(prompt, events, iter_count, done, MODEL_NAME),
+        refresh_per_second=10,
+        screen=True,
+    ) as live:
+        for _ in range(MAX_ITERS):
+            events.append({"type": "waiting"})
+            live.update(build_layout(prompt, events, iter_count, done, MODEL_NAME))
 
-        parse = parse_result(response)
-        messages.append({"role": "assistant", "content": response})
-
-        if isinstance(parse, ToolCallResult):
-            func = getattr(tools, parse.function_name)
-            result = func(**parse.args)
-            messages.append(
-                {
-                    "role": "user",
-                    "content": f"Here's the tool call result: <|tool_call_result|> {result} <|tool_call_result|>",
-                }
+            completion = client.chat.completions.create(
+                model=MODEL_NAME, messages=messages
             )
+            events.pop()  # remove waiting indicator
+            response = completion.choices[0].message.content or ""
+
+            parse = parse_result(response)
+            messages.append({"role": "assistant", "content": response})
+
+            reasoning = _extract_reasoning(response)
+            if reasoning:
+                events.append({"type": "think", "content": reasoning})
+                live.update(build_layout(prompt, events, iter_count, done, MODEL_NAME))
+
+            if isinstance(parse, ToolCallResult):
+                events.append(
+                    {
+                        "type": "tool_call",
+                        "name": parse.function_name,
+                        "args": json.dumps(parse.args),
+                    }
+                )
+                live.update(build_layout(prompt, events, iter_count, done, MODEL_NAME))
+
+                func = getattr(tools, parse.function_name)
+                result = func(**parse.args)
+
+                events.append({"type": "tool_result", "content": str(result)})
+                iter_count += 1
+                live.update(build_layout(prompt, events, iter_count, done, MODEL_NAME))
+
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"Here's the tool call result: <|tool_call_result|> {result} <|tool_call_result|>",
+                    }
+                )
+            else:
+                final_answer = parse.final_answer
+                events.append({"type": "answer", "content": final_answer})
+                done = True
+                live.update(build_layout(prompt, events, iter_count, done, MODEL_NAME))
+                time.sleep(3)
+                break
         else:
-            print("Final answer: ", parse.final_answer)
-            break
+            live.update(build_layout(prompt, events, iter_count, done, MODEL_NAME))
+            time.sleep(2)
 
-        iter += 1
-
-    print(f"Taken {iter} iters to finish the thing.")
+    if final_answer:
+        print("Final answer:", final_answer)
+    print(f"Taken {iter_count} iters.")
 
 
 if __name__ == "__main__":
