@@ -1,0 +1,6 @@
+{
+  "disabledMcpjsonServers": [
+    "docs-langchain",
+    "reference-langchain"
+  ]
+}
